@@ -13,12 +13,35 @@ st.set_page_config(
     layout="wide"
 )
 
-# ============ HIDE STREAMLIT TOOLBAR (Fork / GitHub / menu) ============
+# ============ HIDE STREAMLIT TOOLBAR & GLOBAL TABLE STYLES ============
 st.markdown("""
 <style>
 [data-testid="stToolbar"] {visibility: hidden;}
 .stAppDeployButton {display: none;}
 #MainMenu {visibility: hidden;}
+
+.scrollable-table {
+    width: 100%;
+    overflow-x: auto;
+    display: block;
+    margin-bottom: 10px;
+}
+.scrollable-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+.scrollable-table th, .scrollable-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e0e0e0;
+    white-space: nowrap;
+}
+.scrollable-table th {
+    background-color: #f0f4f8;
+    color: #1a3a5c;
+    font-weight: bold;
+    border-bottom: 2px solid #1a3a5c;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -32,7 +55,7 @@ CUT_OFF_DATE = "30 September"
 # ============ SIDEBAR WITH LOGO (TOP) ============
 with st.sidebar:
     try:
-        st.image("Logo_OM_x_DVL.png", width="stretch")
+        st.image("Logo_OM_x_DVL.png", use_container_width=True)
     except:
         st.markdown(f"""
         <div style="display: flex; justify-content: center; font-size: 60px; color: {DARK_BLUE};">
@@ -97,25 +120,20 @@ if 'Category.1' in df.columns:
 
 
 # ============ FIX: PROPERLY HANDLE PRODUCT ============
-# Check if we have a Product column
 has_product = any(col in df.columns for col in ['Product', 'product', 'Produk', 'produk', 'PRODUCT'])
 
-# If we have a Product column, rename it to Product
 if has_product:
     product_columns = ['Product', 'product', 'Produk', 'produk', 'PRODUCT', 'Product_Name', 'product_name']
     for col in df.columns:
         if col in product_columns:
             df = df.rename(columns={col: 'Product'})
             break
-# If no product but we have first column that might be product
 elif not has_product and len(df.columns) > 0:
     first_col = df.columns[0]
-    # If first column has text values (not numeric, not KOL_Name, not Month)
     if (df[first_col].dtype == 'object' and
             first_col not in ['KOL_Name', 'Platform', 'Tier', 'Brands', 'Sub_Brands', 'Objective', 'Link_Post', 'Month', 'Category']):
         df = df.rename(columns={first_col: 'Product'})
 
-# Clean Product values
 if 'Product' in df.columns:
     df['Product'] = df['Product'].astype(str).str.strip()
 
@@ -123,18 +141,10 @@ if 'Product' in df.columns:
 # ============ CLEAN PLATFORM NAMES ============
 if 'Platform' in df.columns:
     df['Platform'] = df['Platform'].astype(str).str.strip()
-
-    # Standardize TikTok variations
     df['Platform'] = df['Platform'].str.replace('Tiktok', 'TikTok', case=False)
     df['Platform'] = df['Platform'].str.replace('tiktok', 'TikTok', case=False)
-
-    # Standardize X
     df['Platform'] = df['Platform'].str.replace('x', 'X', case=False)
-
-    # Standardize Instagram
     df['Platform'] = df['Platform'].str.replace('instagram', 'Instagram', case=False)
-
-    # Clean up extra spaces
     df['Platform'] = df['Platform'].str.strip()
 
 
@@ -158,13 +168,6 @@ if 'Brands' in df.columns:
 
 
 # ============ CONVERT DATA TYPES ============
-# Currency/count fields: some Excel exports (especially after merging
-# multiple sheets) use a period as the thousands separator (e.g.
-# "3.475.000"), not just a comma. If we only strip commas, values like
-# that fail to parse and silently become NaN -- which is what was making
-# Actual_Spends_IDR (and therefore Spend/CPV) collapse to 0. Strip BOTH
-# separators here since these are whole-rupiah / whole-count fields with
-# no decimals to preserve.
 currency_count_cols = [
     'Followers_Number',
     'Actual_Spends_IDR',
@@ -190,11 +193,6 @@ for col in currency_count_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
 
-# Percent fields: cleaning left exactly as before (comma stripped, not
-# converted to a decimal point). This preserves the existing ~100x scale
-# these values end up at, which is already compensated for everywhere
-# ER/VR/ER_Views are displayed elsewhere in this file (KPI card, Top 10
-# table, KOL search). Changing this here would silently break those.
 percent_cols = [
     'ER',
     'ER_Views',
@@ -237,24 +235,14 @@ if 'Month' in df.columns:
 # ============ HELPER FUNCTION TO CLEAN KOL NAME ============
 def clean_kol_name(name):
     """Remove numbers/prefixes before KOL name and clean up"""
-
     if pd.isna(name):
         return name
 
     name = str(name).strip()
-
-    # Remove patterns like "593 " or "123 " at the start
     name = re.sub(r'^\d+\s+', '', name)
-
-    # Remove any remaining leading numbers
     name = re.sub(r'^\d+', '', name)
-
     name = name.strip()
-
-    # Remove zero-width spaces and other special chars
     name = name.replace('\u200b', '').replace('\u00a0', ' ')
-
-    # Clean up multiple spaces
     name = re.sub(r'\s+', ' ', name)
 
     return name
@@ -274,7 +262,6 @@ with st.sidebar:
 
     # ============ FILTER BY MONTH ============
     if 'Month' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Month']):
-
         unique_months = df['Month'].unique()
         sorted_months_dt = sorted(unique_months)
         sorted_months = [pd.Timestamp(dt).strftime('%b-%y') for dt in sorted_months_dt]
@@ -297,7 +284,6 @@ with st.sidebar:
 
     # ============ FILTER BY TIER ============
     if 'Tier' in df.columns:
-
         tier_options = ['Select All'] + sorted(df['Tier'].dropna().unique().tolist())
 
         selected_tiers = st.multiselect(
@@ -314,7 +300,6 @@ with st.sidebar:
 
     # ============ FILTER BY SUB-BRAND ============
     if 'Sub_Brands' in df.columns:
-
         sub_brands_options = ['Select All'] + sorted(df['Sub_Brands'].dropna().unique().tolist())
 
         selected_sub_brands = st.multiselect(
@@ -331,7 +316,6 @@ with st.sidebar:
 
     # ============ FILTER BY BRAND ============
     if 'Brands' in df.columns:
-
         brands_options = ['Select All'] + sorted(df['Brands'].dropna().unique().tolist())
 
         selected_brands = st.multiselect(
@@ -348,7 +332,6 @@ with st.sidebar:
 
     # ============ FILTER BY CATEGORY (sourced from Product column) ============
     if 'Product' in df.columns:
-
         product_options = ['Select All'] + sorted(df['Product'].dropna().unique().tolist())
 
         selected_products = st.multiselect(
@@ -364,13 +347,12 @@ with st.sidebar:
             filtered_df = filtered_df[filtered_df['Product'].isin(selected_products)]
 
     # ============ CLEAR ALL FILTERS ============
-    if st.button("🔄 Clear All Filters", width="stretch"):
+    if st.button("🔄 Clear All Filters", use_container_width=True):
         st.rerun()
 
 
 # ============ FORMATTING FUNCTIONS ============
 def format_number(num):
-
     if pd.isna(num) or num == 0:
         return "0"
 
@@ -379,21 +361,17 @@ def format_number(num):
     if num >= 1_000_000_000:
         val = num / 1_000_000_000
         return f"{val:.1f}B".replace('.0B', 'B')
-
     elif num >= 1_000_000:
         val = num / 1_000_000
         return f"{val:.1f}M".replace('.0M', 'M')
-
     elif num >= 1_000:
         val = num / 1_000
         return f"{val:.1f}K".replace('.0K', 'K')
-
     else:
         return f"{num:,.0f}"
 
 
 def format_currency(num):
-
     if pd.isna(num) or num == 0:
         return "Rp 0"
 
@@ -402,21 +380,17 @@ def format_currency(num):
     if num >= 1_000_000_000:
         val = num / 1_000_000_000
         return f"Rp {val:.1f}B".replace('.0B', 'B')
-
     elif num >= 1_000_000:
         val = num / 1_000_000
         return f"Rp {val:.1f}M".replace('.0M', 'M')
-
     elif num >= 1_000:
         val = num / 1_000
         return f"Rp {val:.1f}K".replace('.0K', 'K')
-
     else:
         return f"Rp {num:,.0f}"
 
 
 def format_percent(num):
-
     if pd.isna(num):
         return "0%"
 
@@ -424,7 +398,6 @@ def format_percent(num):
         num = num * 100
 
     formatted = f"{num:.2f}%"
-
     formatted = formatted.replace('.00%', '%')
 
     if '.' in formatted:
@@ -438,21 +411,18 @@ def format_percent(num):
 
 
 def format_currency_short(num):
-
     if pd.isna(num) or num == 0:
         return "Rp 0"
 
     return f"Rp {num:,.2f}"
 
 
-# ============ BAR CHART FUNCTION ============
+# ============ BAR CHART FUNCTIONS ============
 def create_bar_chart(data, x_col, y_col, color=None):
+    df_chart = data.reset_index()
+    df_chart.columns = [x_col, y_col]
 
-    df = data.reset_index()
-
-    df.columns = [x_col, y_col]
-
-    bars = alt.Chart(df).mark_bar(
+    bars = alt.Chart(df_chart).mark_bar(
         color=color if color else DARK_BLUE,
         cornerRadiusTopLeft=4,
         cornerRadiusTopRight=4
@@ -472,7 +442,7 @@ def create_bar_chart(data, x_col, y_col, color=None):
         ]
     )
 
-    text = alt.Chart(df).mark_text(
+    text = alt.Chart(df_chart).mark_text(
         align='center',
         baseline='bottom',
         dy=-10,
@@ -499,11 +469,73 @@ def create_bar_chart(data, x_col, y_col, color=None):
     return chart
 
 
+def create_stacked_bar_chart(data, category_col, category_order, colors, month_order_str):
+    # Hide labels on narrow segments (< 5%) so they never overlap when zoomed
+    text_data = data[data['Percentage'] >= 5].copy()
+
+    bars = alt.Chart(data).mark_bar(
+        cornerRadiusTopRight=2,
+        cornerRadiusBottomRight=2
+    ).encode(
+        y=alt.Y(
+            'Month_Str:O',
+            title=None,
+            sort=month_order_str,
+            axis=alt.Axis(labels=True, labelAngle=0)
+        ),
+        x=alt.X(
+            'Segment_Start:Q',
+            title=None,
+            axis=alt.Axis(labels=False)
+        ),
+        x2=alt.X2('Segment_End:Q'),
+        color=alt.Color(
+            f'{category_col}:N',
+            legend=alt.Legend(
+                title=None,
+                orient='right',
+                labelFontSize=11,
+                labelLimit=150,
+                labelPadding=10,
+                rowPadding=5
+            ),
+            scale=alt.Scale(domain=category_order, range=colors)
+        ),
+        tooltip=[
+            alt.Tooltip('Month_Str:O', title='Month'),
+            alt.Tooltip(f'{category_col}:N', title=category_col),
+            alt.Tooltip('Actual_Spends_IDR:Q', format=',.0f', title='Spend'),
+            alt.Tooltip('Percentage:Q', format='.0f', title='%')
+        ]
+    )
+
+    text = alt.Chart(text_data).mark_text(
+        align='center',
+        baseline='middle',
+        fontSize=10,
+        fontWeight='bold',
+        color='white'
+    ).encode(
+        y=alt.Y('Month_Str:O', sort=month_order_str),
+        x=alt.X('Label_Position:Q'),
+        text=alt.Text('Percentage_Label:N')
+    )
+
+    return alt.layer(bars, text).properties(
+        width='container',
+        height=300
+    ).configure_view(
+        strokeWidth=0
+    ).configure_axis(
+        labelFontSize=12,
+        labelColor='#666',
+        grid=False
+    )
+
+
 # ============ HEADER STYLE FUNCTIONS ============
 def section_header_with_divider(title):
-
     st.divider()
-
     st.markdown(f"""
     <div style="color: #000000; font-size: 24px; font-weight: bold; margin-bottom: 15px; margin-top: 10px;">
         {title}
@@ -512,7 +544,6 @@ def section_header_with_divider(title):
 
 
 def section_header_no_divider(title):
-
     st.markdown(f"""
     <div style="color: #000000; font-size: 24px; font-weight: bold; margin-bottom: 15px; margin-top: 10px;">
         {title}
@@ -521,7 +552,6 @@ def section_header_no_divider(title):
 
 
 def section_header_with_cutoff(title, cutoff_text):
-
     st.markdown(f"""
     <div style="
         display: flex;
@@ -555,15 +585,9 @@ def section_header_with_cutoff(title, cutoff_text):
 
 
 # ============ LINK PREVIEW: THUMBNAIL FETCH + HOVER CARD ============
-# Fetches a video thumbnail for a social post link and renders a small
-# hover-preview card next to the "View Post" link. Only TikTok exposes a
-# public oEmbed endpoint that returns a thumbnail_url without needing an
-# approved app / access token, so Instagram and X links fall back to a
-# plain link with no preview image.
 @st.cache_data(ttl=86400, show_spinner=False)
 def get_video_thumbnail(url):
     """Return a preview thumbnail URL for a social post link, where the platform allows it."""
-
     if pd.isna(url) or not str(url).strip():
         return None
 
@@ -578,18 +602,12 @@ def get_video_thumbnail(url):
             )
             if resp.ok:
                 return resp.json().get('thumbnail_url')
-        # Instagram: oEmbed requires a Meta-approved app + access token,
-        # not available publicly, so no thumbnail is fetched here.
-        # X/Twitter: oEmbed returns embed HTML rather than an image URL,
-        # so it can't be used for a simple <img> preview either.
     except Exception:
         return None
 
     return None
 
 
-# CSS for the hover-preview card. Injected once; both the Top 10 table
-# and the KOL Search results reuse the same .link-preview-wrap class.
 st.markdown("""
 <style>
 .link-preview-wrap {
@@ -618,7 +636,6 @@ st.markdown("""
 
 def make_clickable_with_preview(link):
     """Clickable 'View Post' link with a hover thumbnail (TikTok only)."""
-
     if pd.isna(link) or link == '':
         return ''
 
@@ -648,7 +665,6 @@ if (
     'Actual_Spends_IDR' in filtered_df.columns
     and 'Views' in filtered_df.columns
 ):
-
     filtered_df['CPV_Calculated'] = (
         filtered_df['Actual_Spends_IDR']
         / filtered_df['Views']
@@ -694,24 +710,12 @@ total_reach = (
 
 # ============ FIXED KOL COUNT ============
 if 'KOL_Name' in filtered_df.columns:
-
     kol_cleaned = filtered_df['KOL_Name'].astype(str).str.strip()
-
     kol_cleaned = kol_cleaned.str.replace(r'\s+', ' ', regex=True)
-
     kol_cleaned = kol_cleaned.str.replace('\u200b', '', regex=False)
-
     kol_cleaned = kol_cleaned.str.replace('\u00a0', ' ', regex=False)
-
-    # Lowercase before counting uniques: KOL handles are case-insensitive
-    # on the actual platforms (e.g. "Ninitata" and "ninitata" are the same
-    # account), and Excel's UNIQUE() already treats them as one entry by
-    # default. Without this, pandas' case-sensitive nunique() overcounts
-    # any KOL whose name appears with inconsistent capitalization.
     kol_cleaned = kol_cleaned.str.lower()
-
     total_kols = kol_cleaned.nunique()
-
 else:
     total_kols = 0
 
@@ -719,7 +723,7 @@ else:
 total_posts = len(filtered_df)
 
 
-# ============ FIXED ER CALCULATION (sum of engagement / sum of followers) ============
+# ============ FIXED ER CALCULATION ============
 if (
     'Followers_Number' in filtered_df.columns
     and filtered_df['Followers_Number'].sum() > 0
@@ -744,7 +748,6 @@ section_header_with_cutoff(
     f"Cut Off Date: {CUT_OFF_DATE}"
 )
 
-# Add CSS for KPI cards with elegant borders and bold headers
 st.markdown("""
 <style>
 .kpi-card {
@@ -888,7 +891,6 @@ monthly_data = (
 
 
 if not monthly_data.empty:
-
     monthly_data.index = monthly_data.index.strftime('%b')
 
     chart = create_bar_chart(
@@ -898,10 +900,8 @@ if not monthly_data.empty:
         DARK_BLUE
     )
 
-    st.altair_chart(chart, width="stretch")
-
+    st.altair_chart(chart, use_container_width=True)
 else:
-
     st.info("No data available for Spend by Month")
 
 
@@ -921,14 +921,12 @@ if (
     'Platform' in filtered_df.columns
     and 'Month' in filtered_df.columns
 ):
-
     platform_month_data = (
         filtered_df
         .groupby(['Month', 'Platform'], as_index=False)['Actual_Spends_IDR']
         .sum()
     )
 
-    # CALCULATE MONTHLY TOTAL
     month_totals = (
         platform_month_data
         .groupby('Month', as_index=False)['Actual_Spends_IDR']
@@ -939,17 +937,15 @@ if (
 
     platform_month_data = platform_month_data.merge(month_totals, on='Month')
 
-    # CALCULATE PERCENTAGE
     platform_month_data['Percentage'] = (
-        platform_month_data['Actual_Spends_IDR']
-        / platform_month_data['Total_Spend']
+        (platform_month_data['Actual_Spends_IDR'] / platform_month_data['Total_Spend'])
         * 100
     )
 
     platform_month_data['Percentage'] = (
         platform_month_data['Percentage']
-        .round(0)  # ROUND TO INTEGER
-        .fillna(0)  # guard against NaN from a 0-total group (0/0)
+        .round(0)
+        .fillna(0)
     )
 
     platform_month_data['Percentage_Label'] = (
@@ -959,28 +955,19 @@ if (
         + '%'
     )
 
-    # MONTH ORDER
     platform_month_data['Month_Str'] = platform_month_data['Month'].dt.strftime('%b')
-
     month_order = sorted(platform_month_data['Month'].unique())
-
     month_order_str = [pd.Timestamp(m).strftime('%b') for m in month_order]
 
     if not platform_month_data.empty:
-
-        # PLATFORM ORDER
         preferred_platform_order = ['Instagram', 'TikTok', 'X']
-
         existing_platforms = platform_month_data['Platform'].dropna().unique().tolist()
-
         platform_order = [p for p in preferred_platform_order if p in existing_platforms]
 
-        # Add any other platforms that may exist
         for p in existing_platforms:
             if p not in platform_order:
                 platform_order.append(p)
 
-        # FORCE CONSISTENT PLATFORM ORDER
         platform_month_data['Platform'] = pd.Categorical(
             platform_month_data['Platform'],
             categories=platform_order,
@@ -993,7 +980,6 @@ if (
             .reset_index(drop=True)
         )
 
-        # CALCULATE EXACT SEGMENT POSITIONS
         platform_month_data['Segment_End'] = (
             platform_month_data
             .groupby('Month', observed=True)['Actual_Spends_IDR']
@@ -1010,12 +996,6 @@ if (
             + (platform_month_data['Actual_Spends_IDR'] / 2)
         )
 
-        platform_month_data['Segment_Width'] = (
-            platform_month_data['Segment_End']
-            - platform_month_data['Segment_Start']
-        )
-
-        # COLORS
         platform_colors = [
             DARK_BLUE,
             LIGHT_BLUE,
@@ -1027,106 +1007,18 @@ if (
         while len(platform_colors) < len(platform_order):
             platform_colors.append('#e8e8e8')
 
-        # BAR CHART
-        # NOTE: Use explicit x/x2 (Segment_Start -> Segment_End)
-        # instead of stack='zero' so the bars always match the
-        # pandas categorical order used to compute label
-        # positions (Altair's own :N stacking follows
-        # alphabetical order, which can mismatch).
-        bars = alt.Chart(platform_month_data).mark_bar(
-            cornerRadiusTopRight=2,
-            cornerRadiusBottomRight=2
-        ).encode(
-            y=alt.Y(
-                'Month_Str:O',
-                title=None,
-                sort=month_order_str,
-                axis=alt.Axis(labels=True, labelAngle=0)
-            ),
-            x=alt.X(
-                'Segment_Start:Q',
-                title=None,
-                axis=alt.Axis(labels=False)
-            ),
-            x2=alt.X2('Segment_End:Q'),
-            color=alt.Color(
-                'Platform:N',
-                legend=alt.Legend(
-                    title=None,
-                    orient='right',
-                    labelFontSize=11,
-                    labelLimit=150,
-                    labelPadding=10,
-                    rowPadding=5
-                ),
-                scale=alt.Scale(domain=platform_order, range=platform_colors)
-            ),
-            tooltip=[
-                alt.Tooltip('Month_Str:O', title='Month'),
-                alt.Tooltip('Platform:N', title='Platform'),
-                alt.Tooltip('Actual_Spends_IDR:Q', format=',.0f', title='Spend'),
-                alt.Tooltip('Percentage:Q', format='.0f', title='%')
-            ]
+        chart = create_stacked_bar_chart(
+            platform_month_data,
+            'Platform',
+            platform_order,
+            platform_colors,
+            month_order_str
         )
 
-        # LABELS - ONLY SHOW WHEN THE TEXT ACTUALLY FITS
-        # Estimate each segment's rendered pixel width vs. the
-        # estimated pixel width of its label text. If the label
-        # would overflow the segment, drop it (still visible on
-        # hover via tooltip).
-        CHART_WIDTH_PX = 700    # must match the chart's actual width below
-        FONT_SIZE = 10
-        AVG_CHAR_WIDTH = FONT_SIZE * 0.62   # approx width of a bold char at this font size
-        LABEL_PADDING_PX = 6                # buffer so text isn't flush against segment edges
-
-        max_total = platform_month_data['Total_Spend'].max()
-        px_per_unit = CHART_WIDTH_PX / max_total
-
-        platform_month_data['Segment_Width_px'] = (
-            platform_month_data['Segment_Width'] * px_per_unit
-        )
-
-        platform_month_data['Label_Width_px'] = (
-            platform_month_data['Percentage_Label'].str.len() * AVG_CHAR_WIDTH
-            + LABEL_PADDING_PX
-        )
-
-        text_data = platform_month_data[
-            platform_month_data['Segment_Width_px'] >= platform_month_data['Label_Width_px']
-        ].copy()
-
-        text = alt.Chart(text_data).mark_text(
-            align='center',
-            baseline='middle',
-            fontSize=FONT_SIZE,
-            fontWeight='bold',
-            color='white'
-        ).encode(
-            y=alt.Y('Month_Str:O', sort=month_order_str),
-            x=alt.X('Label_Position:Q'),
-            text=alt.Text('Percentage_Label:N')
-        )
-
-        # COMBINE CHART
-        chart = alt.layer(bars, text).properties(
-            width=CHART_WIDTH_PX,   # fixed width so the fit math above stays accurate
-            height=300
-        ).configure_view(
-            strokeWidth=0
-        ).configure_axis(
-            labelFontSize=12,
-            labelColor='#666',
-            grid=False
-        )
-
-        st.altair_chart(chart, width="content")
-
+        st.altair_chart(chart, use_container_width=True)
     else:
-
         st.info("No data available for Spend by Platform")
-
 else:
-
     st.info("Data not available for stacked chart")
 
 
@@ -1146,14 +1038,12 @@ if (
     'Tier' in filtered_df.columns
     and 'Month' in filtered_df.columns
 ):
-
     tier_month_data = (
         filtered_df
         .groupby(['Month', 'Tier'], as_index=False)['Actual_Spends_IDR']
         .sum()
     )
 
-    # CALCULATE MONTHLY TOTAL
     month_totals = (
         tier_month_data
         .groupby('Month', as_index=False)['Actual_Spends_IDR']
@@ -1164,17 +1054,15 @@ if (
 
     tier_month_data = tier_month_data.merge(month_totals, on='Month')
 
-    # CALCULATE PERCENTAGE
     tier_month_data['Percentage'] = (
-        tier_month_data['Actual_Spends_IDR']
-        / tier_month_data['Total_Spend']
+        (tier_month_data['Actual_Spends_IDR'] / tier_month_data['Total_Spend'])
         * 100
     )
 
     tier_month_data['Percentage'] = (
         tier_month_data['Percentage']
-        .round(0)  # ROUND TO INTEGER
-        .fillna(0)  # guard against NaN from a 0-total group (0/0)
+        .round(0)
+        .fillna(0)
     )
 
     tier_month_data['Percentage_Label'] = (
@@ -1184,21 +1072,13 @@ if (
         + '%'
     )
 
-    # MONTH ORDER
     tier_month_data['Month_Str'] = tier_month_data['Month'].dt.strftime('%b')
-
     month_order = sorted(tier_month_data['Month'].unique())
-
     month_order_str = [pd.Timestamp(m).strftime('%b') for m in month_order]
 
     if not tier_month_data.empty:
+        tier_order = tier_month_data['Tier'].dropna().unique().tolist()
 
-        # TIER ORDER
-        existing_tiers = tier_month_data['Tier'].dropna().unique().tolist()
-
-        tier_order = existing_tiers
-
-        # FORCE CONSISTENT TIER ORDER
         tier_month_data['Tier'] = pd.Categorical(
             tier_month_data['Tier'],
             categories=tier_order,
@@ -1211,7 +1091,6 @@ if (
             .reset_index(drop=True)
         )
 
-        # CALCULATE EXACT SEGMENT POSITIONS
         tier_month_data['Segment_End'] = (
             tier_month_data
             .groupby('Month', observed=True)['Actual_Spends_IDR']
@@ -1228,12 +1107,6 @@ if (
             + (tier_month_data['Actual_Spends_IDR'] / 2)
         )
 
-        tier_month_data['Segment_Width'] = (
-            tier_month_data['Segment_End']
-            - tier_month_data['Segment_Start']
-        )
-
-        # COLORS
         tier_colors = [
             LIGHT_BLUE,
             DARK_BLUE,
@@ -1245,97 +1118,18 @@ if (
         while len(tier_colors) < len(tier_order):
             tier_colors.append('#e8e8e8')
 
-        # BAR CHART (explicit x/x2 so bars and labels always agree)
-        bars = alt.Chart(tier_month_data).mark_bar(
-            cornerRadiusTopRight=2,
-            cornerRadiusBottomRight=2
-        ).encode(
-            y=alt.Y(
-                'Month_Str:O',
-                title=None,
-                sort=month_order_str,
-                axis=alt.Axis(labels=True, labelAngle=0)
-            ),
-            x=alt.X(
-                'Segment_Start:Q',
-                title=None,
-                axis=alt.Axis(labels=False)
-            ),
-            x2=alt.X2('Segment_End:Q'),
-            color=alt.Color(
-                'Tier:N',
-                legend=alt.Legend(
-                    title=None,
-                    orient='right',
-                    labelFontSize=11,
-                    labelLimit=150,
-                    labelPadding=10,
-                    rowPadding=5
-                ),
-                scale=alt.Scale(domain=tier_order, range=tier_colors)
-            ),
-            tooltip=[
-                alt.Tooltip('Month_Str:O', title='Month'),
-                alt.Tooltip('Tier:N', title='Tier'),
-                alt.Tooltip('Actual_Spends_IDR:Q', format=',.0f', title='Spend'),
-                alt.Tooltip('Percentage:Q', format='.0f', title='%')
-            ]
+        chart = create_stacked_bar_chart(
+            tier_month_data,
+            'Tier',
+            tier_order,
+            tier_colors,
+            month_order_str
         )
 
-        # LABELS - ONLY SHOW WHEN THE TEXT ACTUALLY FITS
-        CHART_WIDTH_PX = 700
-        FONT_SIZE = 10
-        AVG_CHAR_WIDTH = FONT_SIZE * 0.62
-        LABEL_PADDING_PX = 6
-
-        max_total = tier_month_data['Total_Spend'].max()
-        px_per_unit = CHART_WIDTH_PX / max_total
-
-        tier_month_data['Segment_Width_px'] = (
-            tier_month_data['Segment_Width'] * px_per_unit
-        )
-
-        tier_month_data['Label_Width_px'] = (
-            tier_month_data['Percentage_Label'].str.len() * AVG_CHAR_WIDTH
-            + LABEL_PADDING_PX
-        )
-
-        text_data = tier_month_data[
-            tier_month_data['Segment_Width_px'] >= tier_month_data['Label_Width_px']
-        ].copy()
-
-        text = alt.Chart(text_data).mark_text(
-            align='center',
-            baseline='middle',
-            fontSize=FONT_SIZE,
-            fontWeight='bold',
-            color='white'
-        ).encode(
-            y=alt.Y('Month_Str:O', sort=month_order_str),
-            x=alt.X('Label_Position:Q'),
-            text=alt.Text('Percentage_Label:N')
-        )
-
-        # COMBINE CHART
-        chart = alt.layer(bars, text).properties(
-            width=CHART_WIDTH_PX,
-            height=300
-        ).configure_view(
-            strokeWidth=0
-        ).configure_axis(
-            labelFontSize=12,
-            labelColor='#666',
-            grid=False
-        )
-
-        st.altair_chart(chart, width="content")
-
+        st.altair_chart(chart, use_container_width=True)
     else:
-
         st.info("No data available for Spend by Tier")
-
 else:
-
     st.info("Data not available for stacked chart")
 
 
@@ -1355,14 +1149,12 @@ if (
     'Category' in filtered_df.columns
     and 'Month' in filtered_df.columns
 ):
-
     category_month_data = (
         filtered_df
         .groupby(['Month', 'Category'], as_index=False)['Actual_Spends_IDR']
         .sum()
     )
 
-    # CALCULATE MONTHLY TOTAL
     month_totals = (
         category_month_data
         .groupby('Month', as_index=False)['Actual_Spends_IDR']
@@ -1373,17 +1165,15 @@ if (
 
     category_month_data = category_month_data.merge(month_totals, on='Month')
 
-    # CALCULATE PERCENTAGE
     category_month_data['Percentage'] = (
-        category_month_data['Actual_Spends_IDR']
-        / category_month_data['Total_Spend']
+        (category_month_data['Actual_Spends_IDR'] / category_month_data['Total_Spend'])
         * 100
     )
 
     category_month_data['Percentage'] = (
         category_month_data['Percentage']
         .round(0)
-        .fillna(0)  # guard against NaN from a 0-total group (0/0)
+        .fillna(0)
     )
 
     category_month_data['Percentage_Label'] = (
@@ -1393,16 +1183,11 @@ if (
         + '%'
     )
 
-    # MONTH ORDER
     category_month_data['Month_Str'] = category_month_data['Month'].dt.strftime('%b')
-
     month_order = sorted(category_month_data['Month'].unique())
-
     month_order_str = [pd.Timestamp(m).strftime('%b') for m in month_order]
 
     if not category_month_data.empty:
-
-        # CATEGORY ORDER
         preferred_category_order = [
             'Lifestyle',
             'Family',
@@ -1418,14 +1203,12 @@ if (
         ]
 
         existing_categories = category_month_data['Category'].dropna().unique().tolist()
-
         category_order = [c for c in preferred_category_order if c in existing_categories]
 
         for c in existing_categories:
             if c not in category_order:
                 category_order.append(c)
 
-        # FORCE CONSISTENT CATEGORY ORDER
         category_month_data['Category'] = pd.Categorical(
             category_month_data['Category'],
             categories=category_order,
@@ -1438,7 +1221,6 @@ if (
             .reset_index(drop=True)
         )
 
-        # CALCULATE EXACT SEGMENT POSITIONS
         category_month_data['Segment_End'] = (
             category_month_data
             .groupby('Month', observed=True)['Actual_Spends_IDR']
@@ -1455,12 +1237,6 @@ if (
             + (category_month_data['Actual_Spends_IDR'] / 2)
         )
 
-        category_month_data['Segment_Width'] = (
-            category_month_data['Segment_End']
-            - category_month_data['Segment_Start']
-        )
-
-        # COLORS
         category_colors = [
             DARK_BLUE,
             LIGHT_BLUE,
@@ -1477,105 +1253,18 @@ if (
         while len(category_colors) < len(category_order):
             category_colors.append('#e8e8e8')
 
-        # BAR CHART
-        # NOTE: We plot explicit Segment_Start -> Segment_End
-        # positions (computed above) instead of letting Altair
-        # auto-stack via stack='zero'. Altair's own stacking
-        # order for a :N field follows alphabetical sort, which
-        # does NOT match the pandas categorical order used to
-        # compute our label positions -- that mismatch is what
-        # caused labels to land in the wrong segment. Using
-        # x/x2 directly guarantees bars and labels always agree.
-        bars = alt.Chart(category_month_data).mark_bar(
-            cornerRadiusTopRight=2,
-            cornerRadiusBottomRight=2
-        ).encode(
-            y=alt.Y(
-                'Month_Str:O',
-                title=None,
-                sort=month_order_str,
-                axis=alt.Axis(labels=True, labelAngle=0)
-            ),
-            x=alt.X(
-                'Segment_Start:Q',
-                title=None,
-                axis=alt.Axis(labels=False)
-            ),
-            x2=alt.X2('Segment_End:Q'),
-            color=alt.Color(
-                'Category:N',
-                legend=alt.Legend(
-                    title=None,
-                    orient='right',
-                    labelFontSize=11,
-                    labelLimit=150,
-                    labelPadding=10,
-                    rowPadding=5
-                ),
-                scale=alt.Scale(domain=category_order, range=category_colors)
-            ),
-            tooltip=[
-                alt.Tooltip('Month_Str:O', title='Month'),
-                alt.Tooltip('Category:N', title='Category'),
-                alt.Tooltip('Actual_Spends_IDR:Q', format=',.0f', title='Spend'),
-                alt.Tooltip('Percentage:Q', format='.0f', title='%')
-            ]
+        chart = create_stacked_bar_chart(
+            category_month_data,
+            'Category',
+            category_order,
+            category_colors,
+            month_order_str
         )
 
-        # LABELS - ONLY SHOW WHEN THE TEXT ACTUALLY FITS
-        CHART_WIDTH_PX = 700
-        FONT_SIZE = 10
-        AVG_CHAR_WIDTH = FONT_SIZE * 0.62
-        LABEL_PADDING_PX = 6
-
-        max_total = category_month_data['Total_Spend'].max()
-        px_per_unit = CHART_WIDTH_PX / max_total
-
-        category_month_data['Segment_Width_px'] = (
-            category_month_data['Segment_Width'] * px_per_unit
-        )
-
-        category_month_data['Label_Width_px'] = (
-            category_month_data['Percentage_Label'].str.len() * AVG_CHAR_WIDTH
-            + LABEL_PADDING_PX
-        )
-
-        text_data = category_month_data[
-            category_month_data['Segment_Width_px'] >= category_month_data['Label_Width_px']
-        ].copy()
-
-        text = alt.Chart(text_data).mark_text(
-            align='center',
-            baseline='middle',
-            fontSize=FONT_SIZE,
-            fontWeight='bold',
-            color='white'
-        ).encode(
-            y=alt.Y('Month_Str:O', sort=month_order_str),
-            x=alt.X('Label_Position:Q'),
-            text=alt.Text('Percentage_Label:N')
-        )
-
-        # COMBINE CHART
-        chart = alt.layer(bars, text).properties(
-            width=CHART_WIDTH_PX,
-            height=300
-        ).configure_view(
-            strokeWidth=0
-        ).configure_axis(
-            labelFontSize=12,
-            labelColor='#666',
-            grid=False
-        )
-
-        st.altair_chart(chart, width="content")
-
+        st.altair_chart(chart, use_container_width=True)
     else:
-
         st.info("No data available for Spend by Category")
-
 else:
-
     st.info("Data not available for category chart")
 
 
@@ -1586,7 +1275,6 @@ section_header_with_divider("Top 10 KOL Performance")
 
 
 if 'KOL_Name' in filtered_df.columns:
-
     kol_agg = (
         filtered_df
         .groupby('KOL_Name')
@@ -1609,36 +1297,27 @@ if 'KOL_Name' in filtered_df.columns:
     kol_agg = kol_agg.sort_values('ER', ascending=False)
 
     top_kols = kol_agg.head(10).copy()
-
     top_kols['Rank'] = ['#' + str(i + 1) for i in range(len(top_kols))]
-
     top_kols['KOL'] = top_kols['KOL_Name']
-
     top_kols['ER'] = (top_kols['ER'] / 100).apply(format_percent)
-
     top_kols['Cost'] = (
         top_kols['Actual_Spends_IDR']
         .apply(lambda x: f"Rp {x:,.0f}" if pd.notna(x) else "Rp 0")
     )
 
-    # MAKE LINK_POST CLICKABLE WITH HOVER THUMBNAIL PREVIEW
     if 'Link_Post' in top_kols.columns:
-
         top_kols['Link_Post'] = top_kols['Link_Post'].apply(make_clickable_with_preview)
-
         display_df = top_kols[['Rank', 'KOL', 'Tier', 'ER', 'Cost', 'Link_Post']]
-
     else:
-
         display_df = top_kols[['Rank', 'KOL', 'Tier', 'ER', 'Cost']]
 
     st.markdown("""
     <style>
-
     .dataframe-container {
         display: flex;
         justify-content: center;
         width: 100%;
+        overflow-x: auto;
     }
 
     .dataframe-container table {
@@ -1655,12 +1334,14 @@ if 'KOL_Name' in filtered_df.columns:
         font-weight: bold;
         padding: 10px 15px;
         border-bottom: 2px solid #1a3a5c;
+        white-space: nowrap;
     }
 
     .dataframe-container tbody tr td {
         text-align: left !important;
         padding: 8px 15px;
         border-bottom: 1px solid #e0e0e0;
+        white-space: nowrap;
     }
 
     .dataframe-container tbody tr td:first-child {
@@ -1670,14 +1351,12 @@ if 'KOL_Name' in filtered_df.columns:
     .dataframe-container tbody tr td:last-child {
         text-align: center !important;
     }
-
     </style>
     """, unsafe_allow_html=True)
 
     table_html = display_df.to_html(
         index=False,
-        escape=False,
-        classes='dataframe-container'
+        escape=False
     )
 
     st.markdown(
@@ -1701,55 +1380,41 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ============ HELPER FUNCTION TO FORMAT ER ============
 def format_er_display(value):
-
     if pd.isna(value):
         return "0%"
 
     if value > 1:
         return format_percent(value / 100)
-
     else:
         return format_percent(value)
 
 
-# ============ CREATE SEARCH INPUT ============
 search_col1, search_col2 = st.columns([2, 1])
 
-
 with search_col1:
-
     kol_search = st.text_input(
         "Enter KOL Name",
         placeholder="e.g., bschristy, _ninitata_, A'yun, or any KOL name",
         key="kol_search_input"
     )
 
-
 with search_col2:
-
     st.write("")
     st.write("")
-
-    search_button = st.button("🔍 Search", width="stretch")
+    search_button = st.button("🔍 Search", use_container_width=True)
 
 
 # ============================================================
 # SHOW SEARCH RESULTS
 # ============================================================
 if kol_search or search_button:
-
     if kol_search.strip():
-
         search_term = kol_search.strip().lower()
-
         search_term = re.sub(r'^\d+\s+', '', search_term)
 
         if 'KOL_Name' in filtered_df.columns:
-
             search_df = filtered_df.copy()
-
             search_df['KOL_Name_Search'] = search_df['KOL_Name'].str.lower()
 
             matching_kols = search_df[
@@ -1761,7 +1426,6 @@ if kol_search or search_button:
             ]
 
             if not matching_kols.empty:
-
                 unique_kols = matching_kols['KOL_Name'].unique()
 
                 st.success(
@@ -1770,17 +1434,14 @@ if kol_search or search_button:
                 )
 
                 for kol_name in unique_kols:
-
                     kol_data = (
                         matching_kols[matching_kols['KOL_Name'] == kol_name]
                         .copy()
                     )
 
                     with st.expander(f"📊 {kol_name}", expanded=True):
-
                         display_kol = kol_data.copy()
 
-                        # FORMAT NUMERIC COLUMNS
                         for col in [
                             'Views',
                             'Reach',
@@ -1790,18 +1451,12 @@ if kol_search or search_button:
                             'Followers_Number',
                             'Actual_Spends_IDR'
                         ]:
-
                             if col in display_kol.columns:
-
                                 display_kol[col] = display_kol[col].apply(format_number)
 
-                        # FORMAT ER / ER VIEWS / VR
                         for col in ['ER', 'ER_Views', 'VR']:
-
                             if col in display_kol.columns:
-
                                 if display_kol[col].dtype == 'object':
-
                                     display_kol[col] = pd.to_numeric(
                                         display_kol[col]
                                         .astype(str)
@@ -1809,27 +1464,20 @@ if kol_search or search_button:
                                         .str.replace(',', ''),
                                         errors='coerce'
                                     )
-
                                 display_kol[col] = display_kol[col].apply(format_er_display)
 
-                        # CALCULATE CPV
                         if 'CPV_Calculated' in display_kol.columns:
-
                             display_kol['CPV'] = (
                                 display_kol['CPV_Calculated']
                                 .apply(format_currency_short)
                             )
-
                         elif 'CPV_Rp' in display_kol.columns:
-
                             display_kol['CPV'] = (
                                 display_kol['CPV_Rp']
                                 .apply(format_currency_short)
                             )
 
-                        # SELECT COLUMNS
                         display_columns = []
-
                         desired_order = [
                             'KOL_Name',
                             'Category',
@@ -1848,15 +1496,11 @@ if kol_search or search_button:
                         ]
 
                         for col in desired_order:
-
                             if col in display_kol.columns:
-
                                 if col == 'CPV_Rp':
                                     continue
-
                                 if col == 'CPV_Calculated':
                                     display_columns.append('CPV')
-
                                 else:
                                     display_columns.append(col)
 
@@ -1871,7 +1515,6 @@ if kol_search or search_button:
                         ]
 
                         for col in extra_columns:
-
                             if (
                                 col in display_kol.columns
                                 and col not in display_columns
@@ -1881,7 +1524,6 @@ if kol_search or search_button:
                         display_columns = list(dict.fromkeys(display_columns))
 
                         if not display_columns:
-
                             display_columns = [
                                 'KOL_Name',
                                 'Platform',
@@ -1892,7 +1534,6 @@ if kol_search or search_button:
 
                         display_df = display_kol[display_columns].copy()
 
-                        # RENAME COLUMNS
                         column_rename = {
                             'KOL_Name': 'KOL Name',
                             'Actual_Spends_IDR': 'Cost',
@@ -1902,118 +1543,82 @@ if kol_search or search_button:
                         }
 
                         for old, new in column_rename.items():
-
                             if old in display_df.columns:
-
                                 display_df = display_df.rename(columns={old: new})
 
-                        # FORMAT MONTH
                         if (
                             'Month' in display_df.columns
                             and pd.api.types.is_datetime64_any_dtype(display_df['Month'])
                         ):
-
                             display_df['Month'] = display_df['Month'].dt.strftime('%b-%y')
 
-                        # CLICKABLE LINK WITH HOVER THUMBNAIL PREVIEW
                         if 'Link_Post' in display_df.columns:
-
                             display_df['Link_Post'] = (
                                 display_df['Link_Post']
                                 .apply(make_clickable_with_preview)
                             )
 
-                        # DISPLAY TABLE
+                        # SCROLLABLE TABLE INSIDE EXPANDER
                         st.markdown(
-                            display_df.to_html(escape=False, index=False),
+                            f'<div class="scrollable-table">{display_df.to_html(escape=False, index=False)}</div>',
                             unsafe_allow_html=True
                         )
 
                         st.markdown("---")
-
                         st.markdown("**📈 Performance Summary**")
 
                         summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
 
                         with summary_col1:
-
                             total_posts_kol = len(kol_data)
-
                             st.metric("Total Posts", total_posts_kol)
 
                         with summary_col2:
-
                             total_views_kol = (
                                 kol_data['Views'].sum()
                                 if 'Views' in kol_data.columns
                                 else 0
                             )
-
                             st.metric("Total Views", format_number(total_views_kol))
 
                         with summary_col3:
-
                             total_spend_kol = (
                                 kol_data['Actual_Spends_IDR'].sum()
                                 if 'Actual_Spends_IDR' in kol_data.columns
                                 else 0
                             )
-
                             st.metric("Total Spend", format_currency(total_spend_kol))
 
                         with summary_col4:
-
                             if 'ER' in kol_data.columns:
-
                                 er_values = kol_data['ER'].dropna()
-
                                 if len(er_values) > 0:
-
                                     avg_er = er_values.mean() / 100
-
                                     st.metric("Avg ER", format_percent(avg_er))
-
                                 else:
-
                                     st.metric("Avg ER", "N/A")
-
                             else:
-
                                 st.metric("Avg ER", "N/A")
-
             else:
-
                 st.warning(
                     f"❌ No KOL found matching "
                     f"'{kol_search}'. Please try a different name."
                 )
 
                 if 'KOL_Name' in filtered_df.columns:
-
                     all_kols = filtered_df['KOL_Name'].unique()[:10]
-
                     all_kols = [k for k in all_kols if k and not pd.isna(k)]
 
                     if len(all_kols) > 0:
-
                         st.markdown("**💡 Suggestions:**")
-
                         st.write(", ".join(all_kols[:5]))
-
                         if len(all_kols) > 5:
-
                             st.write(f"... and {len(all_kols) - 5} more")
-
         else:
-
             st.warning("KOL_Name column not found in the data.")
-
     else:
-
         st.info("Please enter a KOL name to search.")
-
 else:
-
     st.info(
         "👆 Enter a KOL name above and click Search "
         "to view their performance details."
@@ -2024,7 +1629,6 @@ else:
 # CLEAR SEARCH
 # ============================================================
 if kol_search:
-
     if st.button("Clear Search"):
         st.rerun()
 
@@ -2041,22 +1645,17 @@ section_header_with_divider("Key Insights")
 section_header_with_divider("Full Data Table")
 
 
-# ============ INITIALIZE SESSION STATE ============
 if 'rows_to_show' not in st.session_state:
     st.session_state.rows_to_show = 10
 
 
 display_full_df = filtered_df.copy()
 
-
-# Remove unnamed columns
 display_full_df = display_full_df.loc[
     :,
     ~display_full_df.columns.str.startswith('Unnamed')
 ]
 
-
-# FORMAT NUMERIC COLUMNS
 for col in [
     'Views',
     'Reach',
@@ -2066,39 +1665,21 @@ for col in [
     'Followers_Number',
     'Actual_Spends_IDR'
 ]:
-
     if col in display_full_df.columns:
-
         display_full_df[col] = display_full_df[col].apply(format_number)
 
-
-# FORMAT PERCENTAGE COLUMNS
 for col in ['ER', 'ER_Views', 'VR']:
-
     if col in display_full_df.columns:
-
         display_full_df[col] = display_full_df[col].apply(format_percent)
 
-
-# FORMAT CPV
 if 'CPV_Calculated' in display_full_df.columns:
-
     display_full_df['CPV_Calculated'] = (
         display_full_df['CPV_Calculated']
         .apply(format_currency_short)
     )
 
-
-# CONVERT LINK_POST TO CLICKABLE HYPERLINK
-# NOTE: The Full Data Table intentionally keeps the plain
-# (non-thumbnail) link renderer. Fetching a thumbnail per row
-# here could mean requests for hundreds of posts on every page
-# load; the hover-preview version is reserved for the much
-# smaller Top 10 table and KOL Search results above.
 if 'Link_Post' in display_full_df.columns:
-
     def make_clickable(link):
-
         if pd.isna(link) or link == '':
             return ''
 
@@ -2119,39 +1700,30 @@ if 'Link_Post' in display_full_df.columns:
     display_full_df['Link_Post'] = display_full_df['Link_Post'].apply(make_clickable)
 
 
-# SHOW ONLY FIRST N ROWS
 total_rows = len(display_full_df)
-
 show_rows = min(st.session_state.rows_to_show, total_rows)
-
 display_df_limited = display_full_df.head(show_rows)
 
 
-# DISPLAY DATAFRAME
+# SCROLLABLE FULL DATA TABLE
 st.markdown(
-    display_df_limited.to_html(escape=False, index=False),
+    f'<div class="scrollable-table">{display_df_limited.to_html(escape=False, index=False)}</div>',
     unsafe_allow_html=True
 )
 
 
 # LOAD MORE BUTTON
 if total_rows > st.session_state.rows_to_show:
-
     col1, col2, col3 = st.columns([1, 2, 1])
 
     with col2:
-
         if st.button(
             f"Load More "
             f"({st.session_state.rows_to_show} "
             f"of {total_rows} shown)",
-            width="stretch"
+            use_container_width=True
         ):
-
             st.session_state.rows_to_show += 10
-
             st.rerun()
-
 else:
-
     st.caption(f"Showing all {total_rows:,} rows")
