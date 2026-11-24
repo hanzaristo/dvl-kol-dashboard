@@ -16,9 +16,21 @@ st.set_page_config(
 # ============ HIDE STREAMLIT TOOLBAR & GLOBAL TABLE STYLES ============
 st.markdown("""
 <style>
-[data-testid="stToolbar"] {visibility: hidden;}
+/* Hide only the deploy button / menu / toolbar actions, NOT the whole toolbar,
+   so the sidebar re-open button stays available */
 .stAppDeployButton {display: none;}
 #MainMenu {visibility: hidden;}
+[data-testid="stMainMenu"] {visibility: hidden;}
+[data-testid="stToolbarActions"] {visibility: hidden;}
+
+/* Make sure the "re-open sidebar" button is always visible
+   (selector names differ between Streamlit versions, so all are listed) */
+[data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"] {
+    visibility: visible !important;
+    display: flex !important;
+}
 
 .scrollable-table {
     width: 100%;
@@ -1439,7 +1451,7 @@ if kol_search or search_button:
                         .copy()
                     )
 
-                    with st.expander(f"📊 {kol_name}", expanded=True):
+                    with st.expander(f"{kol_name}", expanded=True):
                         display_kol = kol_data.copy()
 
                         for col in [
@@ -1565,7 +1577,7 @@ if kol_search or search_button:
                         )
 
                         st.markdown("---")
-                        st.markdown("**📈 Performance Summary**")
+                        st.markdown("**Performance Summary**")
 
                         summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
 
